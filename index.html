@@ -1,0 +1,313 @@
+<link rel="shortcut icon" href="ball.webp">
+<title>CROMI - CRICKET SCORE APP</title>
+<<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+  <h2 style="text-align: center; color: #4CAF50;">Multi-Match Cricket Score App</h2>
+
+  <div style="margin-bottom: 20px;">
+    <label for="matchSelector" style="display: block; margin-bottom: 5px;">Select Match:</label>
+    <select id="matchSelector" onchange="loadMatch()" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+    </select>
+    <button onclick="createNewMatch()" style="width: 100%; background-color: #4CAF50; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px;">Create New Match</button>
+  </div>
+
+  <div id="scoreboard" style="text-align: center; margin-bottom: 20px;">
+    <h3 id="team1Name" style="margin: 5px;">No Match Selected</h3>
+    <p id="score" style="font-size: 20px; margin: 5px;">Score: 0/0</p>
+    <p id="overs" style="font-size: 16px; margin: 5px;">Overs: 0.0</p>
+    <div id="balls" style="margin: 10px; font-size: 16px; color: #555;">Balls: -</div>
+    <p id="batsmen" style="font-size: 16px; margin: 5px;">Striker: - | Non-Striker: -</p>
+    <p id="bowler" style="font-size: 16px; margin: 5px;">Bowler: -</p>
+    <p id="wicketkeeper" style="font-size: 16px; margin: 5px;">Wicket Keeper: Not Assigned</p>
+  </div>
+
+  <div>
+    <div>
+      <label style="display: block; margin-bottom: 5px;">Add Runs:</label>
+      <button onclick="addRuns(0)">0</button>
+      <button onclick="addRuns(1)">1</button>
+      <button onclick="addRuns(2)">2</button>
+      <button onclick="addRuns(3)">3</button>
+      <button onclick="addRuns(4)">4</button>
+      <button onclick="addRuns(5)">5</button>
+      <button onclick="addRuns(6)">6</button>
+    </div>
+    <div style="margin: 10px 0;">
+      <button onclick="addWide()" style="background-color: #FFA500; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px;">Wide</button>
+      <button onclick="addNoBall()" style="background-color: #FF5722; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px;">No Ball</button>
+      <button onclick="addWicket()" style="background-color: #f44336; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px;">Wicket</button>
+      <button onclick="swapBatsman()" style="background-color: #2196F3; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px;">Swap Batsmen</button>
+    </div>
+    <button onclick="retirePlayer()" style="width: 100%; background-color: #FF9800; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px;">Retire Player</button>
+
+    <div style="margin-top: 20px;">
+      <button onclick="switchPosition()" style="width: 100%; background-color: #607D8B; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px;">Switch Position</button>
+      <button onclick="undoLastBall()" style="width: 100%; background-color: #757575; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px;">Undo Last Ball</button>
+    </div>
+  </div>
+
+  <div id="matchResult" style="font-size: 18px; color: #333; margin-top: 20px;">
+    <!-- Match result will be displayed here -->
+  </div>
+</div>
+
+<script>
+  let matches = JSON.parse(localStorage.getItem("matches")) || [];
+  let currentMatchIndex = -1;
+  let lastBall = null; // Stores the last ball's information for undo functionality
+
+  // Function to save matches to localStorage
+  function saveMatches() {
+    localStorage.setItem("matches", JSON.stringify(matches));
+  }
+
+  function createNewMatch() {
+    const team1 = prompt("Enter Team 1 Name:", "Team 1") || "Team 1";
+    const team2 = prompt("Enter Team 2 Name:", "Team 2") || "Team 2";
+    const bowler = prompt("Enter Bowler Name:", "Bowler Name") || "Bowler Name";
+    const batsman1 = prompt("Enter Striker's Name:", "Player 1") || "Player 1";
+    const batsman2 = prompt("Enter Non-Striker's Name:", "Player 2") || "Player 2";
+    const maxOvers = parseInt(prompt("Enter Maximum Overs:", 5)) || 5;
+
+    // Decide which team will bat first
+    const battingFirst = Math.random() < 0.5 ? team1 : team2;
+    const bowlingTeam = battingFirst === team1 ? team2 : team1;
+
+    const newMatch = {
+      team1,
+      team2,
+      score: 0,
+      wickets: 0,
+      overs: 0,
+      balls: 0,
+      maxOvers,
+      striker: batsman1,
+      nonStriker: batsman2,
+      bowler,
+      wicketKeeper: null,
+      batsmenRuns: { [batsman1]: 0, [batsman2]: 0 },
+      overRuns: [[]],
+      players: [batsman1, batsman2, bowler],
+      freeHit: false,
+      battingFirst,
+      bowlingTeam,
+    };
+
+    matches.push(newMatch);
+    currentMatchIndex = matches.length - 1;
+    saveMatches(); // Save match to localStorage
+    updateMatchSelector();
+    loadMatch();
+  }
+
+  function updateMatchSelector() {
+    const selector = document.getElementById('matchSelector');
+    selector.innerHTML = '';
+    matches.forEach((match, index) => {
+      const option = document.createElement('option');
+      option.value = index;
+      option.textContent = `${match.team1} vs ${match.team2}`;
+      selector.appendChild(option);
+    });
+    selector.value = currentMatchIndex;
+  }
+
+  function loadMatch() {
+    const matchIndex = parseInt(document.getElementById('matchSelector').value, 10);
+    if (isNaN(matchIndex) || !matches[matchIndex]) {
+      alert('Invalid match selection!');
+      return;
+    }
+    currentMatchIndex = matchIndex;
+    const match = matches[currentMatchIndex];
+
+    // Show batting and bowling team information
+    document.getElementById('team1Name').innerText = `${match.battingFirst} (Batting) vs ${match.bowlingTeam} (Bowling)`;
+
+    // Check if the match is over
+    if (match.overs >= match.maxOvers) {
+      displayMatchResult(match);
+      return;
+    }
+
+    document.getElementById('score').innerText = `Score: ${match.score}/${match.wickets}`;
+    document.getElementById('overs').innerText = `Overs: ${match.overs}.${match.balls}`;
+    document.getElementById('batsmen').innerText = `Striker: ${match.striker} (${match.batsmenRuns[match.striker]} runs) | Non-Striker: ${match.nonStriker} (${match.batsmenRuns[match.nonStriker]} runs)`;
+    document.getElementById('bowler').innerText = `Bowler: ${match.bowler}`;
+    document.getElementById('wicketkeeper').innerText = `Wicket Keeper: ${match.wicketKeeper || "Not Assigned"}`;
+    updateBalls(match);
+  }
+
+  function displayMatchResult(match) {
+    const matchResult = document.getElementById('matchResult');
+    const resultText = `${match.team1} (Bowling) vs ${match.team2} (Batting) - Match Over!`;
+    matchResult.innerHTML = resultText;
+  }
+
+  function updateBalls(match) {
+    const ballsContainer = document.getElementById('balls');
+    const lastOver = match.overRuns[match.overRuns.length - 1] || [];
+    ballsContainer.innerHTML = lastOver.map(run => `<span>${run}</span>`).join(' | ') || '-';
+  }
+
+  function addRuns(runs) {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    if (match.freeHit) {
+      alert("Free hit! No wicket can be taken on this ball.");
+      match.freeHit = false;  // Reset the free hit flag after this ball
+    }
+
+    match.score += runs;
+    match.balls++;
+    match.batsmenRuns[match.striker] += runs;
+
+    const lastOver = match.overRuns[match.overRuns.length - 1];
+    lastOver.push(runs);
+
+    if (match.balls === 6) {
+      match.balls = 0;
+      match.overs++;
+      if (match.overs < match.maxOvers) {
+        match.overRuns.push([]);
+        const newBowler = prompt("Enter the new bowler's name:");
+        if (newBowler) {
+          match.bowler = newBowler;
+          match.players.push(newBowler);
+        }
+      }
+    }
+
+    lastBall = { type: 'run', runs }; // Store last ball info for undo functionality
+    saveMatches(); // Save match after updating
+    loadMatch();
+  }
+
+  function addWide() {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    match.score += 1;
+    match.batsmenRuns[match.striker] += 1;
+    match.balls++;
+    lastBall = { type: 'wide' }; // Store last ball info for undo functionality
+    saveMatches(); // Save match after updating
+    loadMatch();
+  }
+
+  function addNoBall() {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    match.score += 1;
+    match.batsmenRuns[match.striker] += 1;
+    match.balls++;
+    match.freeHit = true; // Free hit is activated on no-ball
+    lastBall = { type: 'noBall' }; // Store last ball info for undo functionality
+    saveMatches(); // Save match after updating
+    loadMatch();
+  }
+
+  function addWicket() {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    const wicketType = prompt("How did the batsman get out? Options: bowled, caught, lbw, run out, stumped, hit wicket");
+    if (!wicketType) return;
+
+    // Handle each wicket type
+    if (wicketType === "bowled" || wicketType === "lbw" || wicketType === "hit wicket") {
+      match.wickets++;
+      match.players = match.players.filter(player => player !== match.striker);
+      match.striker = match.players[match.players.length - 1];
+    } else if (wicketType === "caught") {
+      const fielder = prompt("Who caught the ball?");
+      if (fielder) {
+        match.wickets++;
+        match.players = match.players.filter(player => player !== match.striker);
+        match.striker = match.players[match.players.length - 1];
+      }
+    } else if (wicketType === "run out") {
+      const thrower = prompt("Who threw the ball?");
+      if (thrower) {
+        match.wickets++;
+        match.players = match.players.filter(player => player !== match.striker);
+        match.striker = match.players[match.players.length - 1];
+      }
+    } else if (wicketType === "stumped") {
+      const keeper = prompt("Who is the wicketkeeper?");
+      match.wicketKeeper = keeper;
+      match.wickets++;
+      match.players = match.players.filter(player => player !== match.striker);
+      match.striker = match.players[match.players.length - 1];
+    }
+
+    lastBall = { type: 'wicket' }; // Store last ball info for undo functionality
+    saveMatches(); // Save match after updating
+    loadMatch();
+  }
+
+  function swapBatsman() {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    const temp = match.striker;
+    match.striker = match.nonStriker;
+    match.nonStriker = temp;
+
+    loadMatch();
+  }
+
+  function retirePlayer() {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    const retiredBatsman = prompt(`Enter the name of the batsman to retire:`);
+    if (retiredBatsman && (retiredBatsman === match.striker || retiredBatsman === match.nonStriker)) {
+      alert(`${retiredBatsman} has retired!`);
+      match.players.push(retiredBatsman);  // Add retired player back to the list
+      match.striker = match.players[match.players.length - 1];
+      loadMatch();
+    } else {
+      alert("Invalid player name!");
+    }
+  }
+
+  function switchPosition() {
+    if (currentMatchIndex === -1) return alert("No match selected.");
+    const match = matches[currentMatchIndex];
+
+    match.battingFirst = match.battingFirst === match.team1 ? match.team2 : match.team1;
+    match.bowlingTeam = match.battingFirst === match.team1 ? match.team2 : match.team1;
+
+    loadMatch();
+  }
+
+  function undoLastBall() {
+    if (currentMatchIndex === -1 || !lastBall) return alert("No last ball to undo.");
+    const match = matches[currentMatchIndex];
+
+    if (lastBall.type === 'run') {
+      match.score -= lastBall.runs;
+      match.batsmenRuns[match.striker] -= lastBall.runs;
+    } else if (lastBall.type === 'wide') {
+      match.score -= 1;
+      match.batsmenRuns[match.striker] -= 1;
+      match.balls--;  // Undo wide
+    } else if (lastBall.type === 'noBall') {
+      match.score -= 1;
+      match.batsmenRuns[match.striker] -= 1;
+      match.freeHit = false;  // Undo free hit
+    } else if (lastBall.type === 'wicket') {
+      match.wickets--;
+      match.striker = match.players[match.players.length - 1];  // Revert to previous batsman
+      match.players.pop();  // Remove new batsman
+    }
+
+    loadMatch();
+    lastBall = null; // Clear last ball
+  }
+
+  // Initialize match selection
+  updateMatchSelector();
+</script>
